@@ -124,7 +124,7 @@ export interface Avocat {
 }
 
 export interface Task {
-  id: number;
+  id: string | number;
   name: string;
   caseId: string;
   lawyer: string;

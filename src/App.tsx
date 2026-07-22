@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { usePersistentState } from './hooks/usePersistentState';
-import { initialClients, initialCases, initialEvents, initialTasks, initialInvoices, initialAvocats, initialPersonnels, initialFournisseurs } from './data/mockData';
-
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import LoginPage from './pages/LoginPage';
@@ -17,31 +15,19 @@ import AvocatsPage from './pages/AvocatsPage';
 import PersonnelsPage from './pages/PersonnelsPage';
 import FournisseursPage from './pages/FournisseursPage';
 import GestionPage from './pages/GestionPage';
-import AllInterfacesPage from './pages/AllInterfacesPage';
-import AIAssistantPage from './pages/AIAssistantPage';
 import AuditLogsPage from './pages/AuditLogsPage';
-import CorrespondancePage from './pages/CorrespondancePage';
-import { Client, Case, Event, Task, Invoice, Avocat, Personnel, Fournisseur, AuditLog, Correspondance, CaseProcedure } from './types';
-import { playAlarmSound, stopAllAlarmSounds } from './utils/audio';
-
-// Supabase configuration
+import { Client, Case, Event, Task, Invoice, Avocat, Personnel, Fournisseur, AuditLog, Correspondance } from './types';
 import { supabase } from './lib/supabase';
 import { 
     dbCreateDoc, 
     dbUpdateDoc, 
     dbDeleteDoc, 
-    dbCreateAuditLog,
     mappers
 } from './lib/supabaseService';
-
 import { motion, AnimatePresence } from 'motion/react';
-import EmailComposerModal from './components/modals/EmailComposerModal';
-import { ProtectedGuard } from './components/auth/ProtectedGuard';
 import { getLocalUsers, syncUsersWithFirestore } from './services/userService';
-import { AppUser, ModuleKey } from './types/rbac';
+import { AppUser } from './types/rbac';
 import { ALL_MODULE_PERMISSIONS } from './services/rbacService';
-
-declare const jspdf: any;
 
 function App() {
     const [isAuthenticated, setIsAuthenticated] = usePersistentState('kbb_auth', false);
@@ -49,7 +35,6 @@ function App() {
     const [currentUserObj, setCurrentUserObj] = usePersistentState<AppUser | null>('kbb_currentUserObj', null);
     const [currentPage, setCurrentPage] = useState('Dashboard');
 
-    // Handle Auth state change
     useEffect(() => {
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
             if (event === 'SIGNED_IN' && session) {
@@ -60,7 +45,6 @@ function App() {
                 setCurrentUserObj(null);
             }
         });
-
         return () => subscription.unsubscribe();
     }, []);
 
@@ -74,22 +58,10 @@ function App() {
                 roleLower.includes('directeur') ||
                 roleLower.includes('associé') ||
                 roleLower.includes('partner') ||
-                roleLower.includes('associet') ||
-                currentUserInfo.email === 'jeremieshusu4@gmail.com' ||
-                currentUserInfo.email === 'hervemich@icloud.com' ||
-                currentUserInfo.email === 'admin@cabinet.com' ||
                 currentUserInfo.email === 'admin@kbb.cd';
 
             if (found) {
-                if (isAdminOrDirecteur) {
-                    setCurrentUserObj({
-                        ...found,
-                        role: 'Admin',
-                        permissions: ALL_MODULE_PERMISSIONS.map(m => m.key)
-                    });
-                } else {
-                    setCurrentUserObj(found);
-                }
+                setCurrentUserObj(isAdminOrDirecteur ? { ...found, role: 'Admin', permissions: ALL_MODULE_PERMISSIONS.map(m => m.key) } : found);
             } else if (isAdminOrDirecteur) {
                 setCurrentUserObj({
                     id: currentUserInfo.id || 'admin-default',
@@ -118,21 +90,7 @@ function App() {
     const [personnels, setPersonnels] = useState<Personnel[]>([]);
     const [fournisseurs, setFournisseurs] = useState<Fournisseur[]>([]);
     const [logs, setLogs] = useState<AuditLog[]>([]);
-    const [correspondances, setCorrespondances] = useState<Correspondance[]>([]);
-    const [presences, setPresences] = useState<{ [email: string]: any }>({});
 
-    const [isDarkMode, setIsDarkMode] = usePersistentState('kbb_darkMode', false);
-    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
-    useEffect(() => {
-        if (isDarkMode) {
-            document.documentElement.classList.add('dark');
-        } else {
-            document.documentElement.classList.remove('dark');
-        }
-    }, [isDarkMode]);
-
-    // Combined data with procedures injected into cases
     const combinedCases = useMemo(() => {
         return cases.map(c => ({
             ...c,
@@ -140,35 +98,47 @@ function App() {
         }));
     }, [cases, procedures]);
 
-    // Real-time synchronization using Supabase Channels with Mappers
+    const lawyerNames = useMemo(() => avocats.map(a => a.fullName), [avocats]);
+
     useEffect(() => {
         if (!isAuthenticated) return;
 
-        const syncTable = (table: string, mapper: (d: any) => any, setter: (data: any) => void) => {
-            const fetchInitial = async () => {
-                const { data, error } = await supabase.from(table).select('*');
+        const sync = (table: string, mapper: (d: any) => any, setter: (data: any) => void) => {
+            const fetch = async () => {
+                let query = supabase.from(table).select('*');
+                if (table === 'dossiers') query = supabase.from(table).select('*, clients(*)');
+                if (table === 'tasks') query = supabase.from(table).select('*, profiles(*)');
+
+                const { data, error } = await query;
                 if (!error && data) setter(data.map(mapper));
             };
-            fetchInitial();
-
-            return supabase
-                .channel(`public:${table}`)
-                .on('postgres_changes', { event: '*', schema: 'public', table }, () => {
-                    fetchInitial();
-                })
-                .subscribe();
+            fetch();
+            return supabase.channel(`public:${table}`).on('postgres_changes', { event: '*', schema: 'public', table }, fetch).subscribe();
         };
 
-        syncTable('clients', mappers.client, setClients);
-        syncTable('dossiers', mappers.case, setCases);
-        syncTable('procedures', mappers.procedure, setProcedures);
-        syncTable('calendar_events', mappers.event, setEvents);
-        syncTable('tasks', mappers.task, setTasks);
-        syncTable('factures', mappers.invoice, setInvoices);
-
-        return () => {
-            supabase.removeAllChannels();
+        sync('clients', mappers.client, setClients);
+        sync('dossiers', mappers.case, setCases);
+        sync('procedures', mappers.procedure, setProcedures);
+        sync('calendar_events', mappers.event, setEvents);
+        sync('tasks', mappers.task, setTasks);
+        sync('factures', mappers.invoice, setInvoices);
+        // Profiles/Avocats sync (can be improved with proper mapper)
+        const fetchAvocats = async () => {
+            const { data } = await supabase.from('profiles').select('*');
+            if (data) setAvocats(data.map(p => ({
+                id: p.id,
+                fullName: `${p.first_name} ${p.last_name}`,
+                emails: [p.email],
+                phone: p.phone || '',
+                cabinetStatus: 'Junior',
+                serviceStatus: p.is_active ? 'Actif' : 'Inactif',
+                photoUrl: p.avatar_url,
+                serviceStartDate: p.created_at
+            } as any)));
         };
+        fetchAvocats();
+
+        return () => { supabase.removeAllChannels(); };
     }, [isAuthenticated]);
 
     const [toasts, setToasts] = useState<{ id: string, type: 'success' | 'error', text: string }[]>([]);
@@ -178,13 +148,11 @@ function App() {
         setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5000);
     };
 
-    const handleUpdateTaskStatus = async (id: number | string, status: string) => {
+    const handleUpdateTaskStatus = async (id: any, status: string) => {
         try {
             await dbUpdateDoc('tasks', id, { status });
             triggerToast('success', 'Statut mis à jour.');
-        } catch (err) {
-            triggerToast('error', 'Échec.');
-        }
+        } catch (err) { triggerToast('error', 'Échec.'); }
     };
 
     const handleUpdateCase = async (updated: Case) => {
@@ -192,40 +160,36 @@ function App() {
             const { id, procedures: _, ...cleanData } = updated as any;
             await dbUpdateDoc('cases', id, cleanData);
             triggerToast('success', 'Dossier mis à jour.');
-        } catch (err) {
-            triggerToast('error', 'Échec.');
-        }
-    };
-
-    const handleLogout = async () => {
-        await supabase.auth.signOut();
+        } catch (err) { triggerToast('error', 'Échec.'); }
     };
 
     const renderPage = () => {
         const pageProps = {
             clients, cases: combinedCases, events, tasks, invoices, avocats, personnels, fournisseurs,
-            onAddClient: () => {}, onAddCase: () => {}, onAddEvent: () => {},
-            onAddTask: () => {}, onAddInvoice: () => {},
+            lawyers: lawyerNames,
+            onAddTask: async (t: any) => { await dbCreateDoc('tasks', '', t); triggerToast('success', 'Tâche ajoutée'); },
+            onUpdateTask: async (t: any) => { await dbUpdateDoc('tasks', t.id, t); triggerToast('success', 'Tâche modifiée'); },
             onUpdateCase: handleUpdateCase,
-            onSendEmail: () => {},
+            onUpdateTaskStatus: handleUpdateTaskStatus,
+            onSendEmail: () => {}
         };
 
         switch (currentPage) {
-            case 'Dashboard': return <DashboardPage {...pageProps} onUpdateTaskStatus={handleUpdateTaskStatus} />;
-            case 'Clients': return <ClientsPage {...pageProps} />;
-            case 'Dossiers': return <CasesPage {...pageProps} />;
+            case 'Dashboard': return <DashboardPage {...pageProps} />;
+            case 'Clients': return <ClientsPage {...pageProps} onAddClient={() => {}} onExport={() => {}} />;
+            case 'Dossiers': return <CasesPage {...pageProps} onAddCase={() => {}} onExport={() => {}} />;
             case 'Procedures': return <ProceduresPage cases={combinedCases} onUpdateCase={handleUpdateCase} searchQuery={searchQuery} setSearchQuery={setSearchQuery} />;
             case 'Agenda': return <AgendaPage {...pageProps} />;
-            case 'Evenements': return <EventsPage {...pageProps} />;
-            case 'Chat': return <ChatPage {...pageProps} currentUserInfo={currentUserInfo} presences={presences} />;
+            case 'Evenements': return <EventsPage {...pageProps} onAddEvent={() => {}} onUpdateEvent={() => {}} />;
+            case 'Chat': return <ChatPage {...pageProps} currentUserInfo={currentUserInfo} presences={{}} />;
             case 'Correspondance': return <CorrespondancePage {...pageProps} currentUserInfo={currentUserInfo} />;
-            case 'Facturation': return <BillingPage {...pageProps} />;
-            case 'Avocats': return <AvocatsPage {...pageProps} />;
-            case 'Personnels': return <PersonnelsPage {...pageProps} />;
-            case 'Fournisseurs': return <FournisseursPage {...pageProps} />;
-            case 'Gestion': return <GestionPage {...pageProps} currentUser={currentUserObj} onAddToast={triggerToast} />;
+            case 'Facturation': return <BillingPage {...pageProps} onAddInvoice={() => {}} />;
+            case 'Avocats': return <AvocatsPage {...pageProps} onAddAvocat={() => {}} />;
+            case 'Personnels': return <PersonnelsPage {...pageProps} onAddPersonnel={() => {}} onDeletePersonnel={() => {}} />;
+            case 'Fournisseurs': return <FournisseursPage {...pageProps} onAddFournisseur={() => {}} onDeleteFournisseur={() => {}} />;
+            case 'Gestion': return <GestionPage {...pageProps} onAddToast={triggerToast} />;
             case 'AuditLogs': return <AuditLogsPage logs={logs} />;
-            default: return <DashboardPage {...pageProps} onUpdateTaskStatus={handleUpdateTaskStatus} />;
+            default: return <DashboardPage {...pageProps} />;
         }
     };
 
@@ -238,19 +202,18 @@ function App() {
     }
 
     return (
-        <div className="flex h-screen bg-gray-100 dark:bg-[#070b13] font-sans overflow-hidden transition-colors duration-300">
-            <Sidebar currentPage={currentPage} setCurrentPage={setCurrentPage} onLogout={handleLogout} currentUserInfo={currentUserInfo} currentUser={currentUserObj} isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+        <div className="flex h-screen bg-gray-100 dark:bg-[#070b13] font-sans overflow-hidden">
+            <Sidebar currentPage={currentPage} setCurrentPage={setCurrentPage} onLogout={() => supabase.auth.signOut()} currentUserInfo={currentUserInfo} currentUser={currentUserObj} isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                <Header searchQuery={searchQuery} setSearchQuery={setSearchQuery} clients={clients} cases={combinedCases} events={events} setCurrentPage={setCurrentPage} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} currentUserInfo={currentUserInfo} onLogout={handleLogout} onMenuToggle={() => setIsSidebarOpen(true)} />
-                <main className="flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6 lg:p-8 custom-scrollbar relative">
+                <Header searchQuery={searchQuery} setSearchQuery={setSearchQuery} clients={clients} cases={combinedCases} events={events} setCurrentPage={setCurrentPage} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} currentUserInfo={currentUserInfo} onLogout={() => supabase.auth.signOut()} onMenuToggle={() => setIsSidebarOpen(true)} />
+                <main className="flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6 lg:p-8 custom-scrollbar">
                     {renderPage()}
                 </main>
             </div>
-            {/* Toasts */}
-            <div className="fixed bottom-5 right-5 space-y-3 z-50">
+            <div className="fixed bottom-5 right-5 space-y-3 z-50 pointer-events-none">
                 <AnimatePresence>
                     {toasts.map(t => (
-                        <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} key={t.id} className={`p-4 rounded-xl shadow-lg text-white ${t.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
+                        <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} key={t.id} className={`p-4 rounded-xl shadow-lg text-white pointer-events-auto ${t.type === 'success' ? 'bg-emerald-600' : 'bg-rose-600'}`}>
                             {t.text}
                         </motion.div>
                     ))}
