@@ -79,8 +79,8 @@ const AIAssistantPage: FC<AIAssistantPageProps> = ({ clients, cases, tasks, invo
                 statut: i.status
             })),
             stats: {
-                totalDu: invoices.reduce((acc, inv) => acc + (inv.totalAmount - inv.paidAmount), 0),
-                tachesEnRetard: tasks.filter(t => t.status !== 'Effectué' && new Date(t.dueDate) < new Date()).length
+                totalDu: (Array.isArray(invoices) ? invoices : []).reduce((acc, inv) => acc + ((inv?.totalAmount || 0) - (inv?.paidAmount || 0)), 0),
+                tachesEnRetard: (Array.isArray(tasks) ? tasks : []).filter(t => t?.status !== 'Effectué' && t?.dueDate && !isNaN(new Date(t.dueDate).getTime()) && new Date(t.dueDate) < new Date()).length
             }
         };
     }, [clients, cases, tasks, invoices]);

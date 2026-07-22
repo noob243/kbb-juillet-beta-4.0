@@ -48,23 +48,30 @@ const ProceduresPage: FC<ProceduresPageProps> = ({ cases, onUpdateCase, searchQu
   });
 
   // Flatmap all procedures from cases & supplement them with case context
-  const allProcedures = cases.flatMap(c => {
-    return (c.procedures || []).map(p => ({
+  const allProcedures = Array.isArray(cases) ? cases.flatMap(c => {
+    return (c?.procedures || []).map(p => ({
       ...p,
       caseId: c.id,
       caseName: c.name,
       clientName: c.client
     }));
-  });
+  }) : [];
 
   // Filter procedures
   const filteredProcedures = allProcedures.filter(proc => {
-    const matchesSearch = 
-      proc.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (proc.instance || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (proc.objet || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      proc.caseName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      proc.clientName.toLowerCase().includes(searchQuery.toLowerCase());
+    if (!proc) return false;
+    const name = proc.name || '';
+    const instance = proc.instance || '';
+    const objet = proc.objet || '';
+    const caseName = proc.caseName || '';
+    const clientName = proc.clientName || '';
+
+    const matchesSearch =
+      name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      instance.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      objet.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      caseName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      clientName.toLowerCase().includes(searchQuery.toLowerCase());
       
     const matchesStatus = statusFilter === 'All' || proc.status === statusFilter;
     
@@ -332,7 +339,21 @@ const ProceduresPage: FC<ProceduresPageProps> = ({ cases, onUpdateCase, searchQu
 
                   <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
                     <Calendar className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                    <span>Période : <strong className="text-slate-800 dark:text-slate-200">{proc.dateDebut ? new Date(proc.dateDebut).toLocaleDateString('fr-FR') : 'N/A'} — {proc.dateFin ? new Date(proc.dateFin).toLocaleDateString('fr-FR') : 'En cours'}</strong></span>
+                    <span>Période : <strong className="text-slate-800 dark:text-slate-200">
+                      {(() => {
+                        try {
+                          return proc.dateDebut ? new Date(proc.dateDebut).toLocaleDateString('fr-FR') : 'N/A';
+                        } catch (e) {
+                          return 'N/A';
+                        }
+                      })()} — {(() => {
+                        try {
+                          return proc.dateFin ? new Date(proc.dateFin).toLocaleDateString('fr-FR') : 'En cours';
+                        } catch (e) {
+                          return 'En cours';
+                        }
+                      })()}
+                    </strong></span>
                   </div>
                 </div>
 
