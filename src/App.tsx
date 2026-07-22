@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { usePersistentState } from './hooks/usePersistentState';
 import { initialClients, initialCases, initialEvents, initialTasks, initialInvoices, initialAvocats, initialPersonnels, initialFournisseurs } from './data/mockData';
 
@@ -21,7 +21,7 @@ import AllInterfacesPage from './pages/AllInterfacesPage';
 import AIAssistantPage from './pages/AIAssistantPage';
 import AuditLogsPage from './pages/AuditLogsPage';
 import CorrespondancePage from './pages/CorrespondancePage';
-import { Client, Case, Event, Task, Invoice, Avocat, Personnel, Fournisseur, AuditLog, Correspondance } from './types';
+import { Client, Case, Event, Task, Invoice, Avocat, Personnel, Fournisseur, AuditLog, Correspondance, CaseProcedure } from './types';
 import { playAlarmSound, stopAllAlarmSounds } from './utils/audio';
 
 // Supabase configuration
@@ -110,6 +110,7 @@ function App() {
     const [searchQuery, setSearchQuery] = useState('');
     const [clients, setClients] = useState<Client[]>([]);
     const [cases, setCases] = useState<Case[]>([]);
+    const [procedures, setProcedures] = useState<any[]>([]);
     const [events, setEvents] = useState<Event[]>([]);
     const [tasks, setTasks] = useState<Task[]>([]);
     const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -131,13 +132,21 @@ function App() {
         }
     }, [isDarkMode]);
 
+    // Combined data with procedures injected into cases
+    const combinedCases = useMemo(() => {
+        return cases.map(c => ({
+            ...c,
+            procedures: procedures.filter(p => p.dossier_id === c.id)
+        }));
+    }, [cases, procedures]);
+
     // Real-time synchronization using Supabase Channels with Mappers
     useEffect(() => {
         if (!isAuthenticated) return;
 
         const syncTable = (table: string, mapper: (d: any) => any, setter: (data: any) => void) => {
             const fetchInitial = async () => {
-                const { data, error } = await supabase.from(table).select(table === 'dossiers' ? '*, clients(*)' : table === 'tasks' ? '*, profiles(*)' : '*');
+                const { data, error } = await supabase.from(table).select('*');
                 if (!error && data) setter(data.map(mapper));
             };
             fetchInitial();
@@ -150,25 +159,19 @@ function App() {
                 .subscribe();
         };
 
-        const channelClients = syncTable('clients', mappers.client, setClients);
-        const channelCases = syncTable('dossiers', mappers.case, setCases);
-        const channelEvents = syncTable('calendar_events', mappers.event, setEvents);
-        const channelTasks = syncTable('tasks', mappers.task, setTasks);
-        const channelInvoices = syncTable('factures', mappers.invoice, setInvoices);
-        // Profiles, Personnel etc. can be added here...
+        syncTable('clients', mappers.client, setClients);
+        syncTable('dossiers', mappers.case, setCases);
+        syncTable('procedures', mappers.procedure, setProcedures);
+        syncTable('calendar_events', mappers.event, setEvents);
+        syncTable('tasks', mappers.task, setTasks);
+        syncTable('factures', mappers.invoice, setInvoices);
 
         return () => {
-            supabase.removeChannel(channelClients);
-            supabase.removeChannel(channelCases);
-            supabase.removeChannel(channelEvents);
-            supabase.removeChannel(channelTasks);
-            supabase.removeChannel(channelInvoices);
+            supabase.removeAllChannels();
         };
     }, [isAuthenticated]);
 
     const [toasts, setToasts] = useState<{ id: string, type: 'success' | 'error', text: string }[]>([]);
-    const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {} });
-
     const triggerToast = (type: 'success' | 'error', text: string) => {
         const id = Math.random().toString();
         setToasts(prev => [...prev, { id, type, text }]);
@@ -186,7 +189,8 @@ function App() {
 
     const handleUpdateCase = async (updated: Case) => {
         try {
-            await dbUpdateDoc('cases', updated.id, updated);
+            const { id, procedures: _, ...cleanData } = updated as any;
+            await dbUpdateDoc('cases', id, cleanData);
             triggerToast('success', 'Dossier mis à jour.');
         } catch (err) {
             triggerToast('error', 'Échec.');
@@ -199,7 +203,7 @@ function App() {
 
     const renderPage = () => {
         const pageProps = {
-            clients, cases, events, tasks, invoices, avocats, personnels, fournisseurs,
+            clients, cases: combinedCases, events, tasks, invoices, avocats, personnels, fournisseurs,
             onAddClient: () => {}, onAddCase: () => {}, onAddEvent: () => {},
             onAddTask: () => {}, onAddInvoice: () => {},
             onUpdateCase: handleUpdateCase,
@@ -210,7 +214,7 @@ function App() {
             case 'Dashboard': return <DashboardPage {...pageProps} onUpdateTaskStatus={handleUpdateTaskStatus} />;
             case 'Clients': return <ClientsPage {...pageProps} />;
             case 'Dossiers': return <CasesPage {...pageProps} />;
-            case 'Procedures': return <ProceduresPage cases={cases} onUpdateCase={handleUpdateCase} searchQuery={searchQuery} setSearchQuery={setSearchQuery} />;
+            case 'Procedures': return <ProceduresPage cases={combinedCases} onUpdateCase={handleUpdateCase} searchQuery={searchQuery} setSearchQuery={setSearchQuery} />;
             case 'Agenda': return <AgendaPage {...pageProps} />;
             case 'Evenements': return <EventsPage {...pageProps} />;
             case 'Chat': return <ChatPage {...pageProps} currentUserInfo={currentUserInfo} presences={presences} />;
@@ -237,18 +241,20 @@ function App() {
         <div className="flex h-screen bg-gray-100 dark:bg-[#070b13] font-sans overflow-hidden transition-colors duration-300">
             <Sidebar currentPage={currentPage} setCurrentPage={setCurrentPage} onLogout={handleLogout} currentUserInfo={currentUserInfo} currentUser={currentUserObj} isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                <Header searchQuery={searchQuery} setSearchQuery={setSearchQuery} clients={clients} cases={cases} events={events} setCurrentPage={setCurrentPage} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} currentUserInfo={currentUserInfo} onLogout={handleLogout} onMenuToggle={() => setIsSidebarOpen(true)} />
+                <Header searchQuery={searchQuery} setSearchQuery={setSearchQuery} clients={clients} cases={combinedCases} events={events} setCurrentPage={setCurrentPage} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} currentUserInfo={currentUserInfo} onLogout={handleLogout} onMenuToggle={() => setIsSidebarOpen(true)} />
                 <main className="flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6 lg:p-8 custom-scrollbar relative">
                     {renderPage()}
                 </main>
             </div>
             {/* Toasts */}
             <div className="fixed bottom-5 right-5 space-y-3 z-50">
-                {toasts.map(t => (
-                    <div key={t.id} className={`p-4 rounded-xl shadow-lg text-white ${t.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
-                        {t.text}
-                    </div>
-                ))}
+                <AnimatePresence>
+                    {toasts.map(t => (
+                        <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} key={t.id} className={`p-4 rounded-xl shadow-lg text-white ${t.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
+                            {t.text}
+                        </motion.div>
+                    ))}
+                </AnimatePresence>
             </div>
         </div>
     );

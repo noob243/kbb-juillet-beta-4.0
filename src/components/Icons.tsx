@@ -297,6 +297,36 @@ export const SearchIcon: FC<IconProps> = ({ className = "w-5 h-5", size = "1em" 
   </svg>
 );
 
+export const PlusIcon: FC<IconProps> = ({ className = "w-5 h-5", size = "1em" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} className={`${className} inline-block shrink-0`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <line x1="12" y1="5" x2="12" y2="19" />
+    <line x1="5" y1="12" x2="19" y2="12" />
+  </svg>
+);
+
+export const ClockIcon: FC<IconProps> = ({ className = "w-5 h-5", size = "1em" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} className={`${className} inline-block shrink-0`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10" />
+    <polyline points="12 6 12 12 16 14" />
+  </svg>
+);
+
+export const FileTextIcon: FC<IconProps> = ({ className = "w-5 h-5", size = "1em" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} className={`${className} inline-block shrink-0`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <polyline points="14 2 14 8 20 8" />
+    <line x1="16" y1="13" x2="8" y2="13" />
+    <line x1="16" y1="17" x2="8" y2="17" />
+    <polyline points="10 9 9 9 8 9" />
+  </svg>
+);
+
+export const FilterIcon: FC<IconProps> = ({ className = "w-5 h-5", size = "1em" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} className={`${className} inline-block shrink-0`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+  </svg>
+);
+
 export const TrashIcon: FC<IconProps> = ({ className = "w-5 h-5", size = "1em" }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} className={`${className} inline-block shrink-0`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" id="flat-trash-icon">
     <polyline points="3 6 5 6 21 6" stroke="currentColor" />

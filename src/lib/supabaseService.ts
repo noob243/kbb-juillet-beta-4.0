@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { AuditLog, Case, Client, Event, Task, Invoice, Personnel, Fournisseur, Correspondance } from '../types';
+import { AuditLog, Case, Client, Event, Task, Invoice, Personnel, Fournisseur, Correspondance, CaseProcedure } from '../types';
 
 export enum OperationType {
   CREATE = 'create',
@@ -22,7 +22,8 @@ const tableMap: Record<string, string> = {
   'fournisseurs': 'fournisseurs',
   'auditLogs': 'audit_logs',
   'presences': 'presences',
-  'correspondances': 'correspondances'
+  'correspondances': 'correspondances',
+  'procedures': 'procedures'
 };
 
 function getTableName(collectionName: string): string {
@@ -74,13 +75,23 @@ export const mappers = {
     totalAmount: Number(d.amount_total) || 0,
     paidAmount: 0,
     status: d.status === 'PAYEE' ? 'Réglée' : d.status === 'ANNULEE' ? 'Réglée' : 'Non réglée'
+  }),
+  procedure: (d: any): CaseProcedure & { dossier_id: string } => ({
+    id: d.id,
+    name: d.name || 'Procédure sans nom',
+    instance: d.instance || '',
+    objet: d.objet || '',
+    dateDebut: d.date_debut || '',
+    dateFin: d.date_fin || '',
+    status: d.status || 'En cours',
+    dossier_id: d.dossier_id
   })
 };
 
 export async function dbCreateDoc(collectionName: string, id: string | number, data: any) {
   const table = getTableName(collectionName);
   try {
-    const { error } = await supabase.from(table).insert({ ...data, id: undefined }); // UUID handled by DB usually
+    const { error } = await supabase.from(table).insert({ ...data, id: undefined });
     if (error) throw error;
     return true;
   } catch (error) {
@@ -118,12 +129,9 @@ export async function dbCreateAuditLog(log: any) {
   }
 }
 
-// Helper to keep syncLocalCollection for backward compatibility during migration
 export async function syncLocalCollection(collectionName: string, localItems: any[]) {
-  // Logic to push local items to Supabase if they don't exist
-  // Omitted for brevity, but could be implemented similarly to previous version
 }
 
 export function sanitizeForSupabase(obj: any): any {
-  return obj; // Simplified
+  return obj;
 }
