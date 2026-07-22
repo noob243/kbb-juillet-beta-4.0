@@ -12,12 +12,10 @@ import {
   CheckIcon,
   UserIcon,
   PlusIcon,
-  ClockIcon
+  ClockIcon,
+  FilterIcon
 } from '../components/Icons';
 import { supabase } from '../lib/supabase';
-
-// Fallbacks for specific icons not in library
-const FilterIcon = () => <span>🔍</span>;
 
 interface ProceduresPageProps {
   cases: Case[];
